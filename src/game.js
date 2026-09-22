@@ -1180,10 +1180,10 @@ export class Game {
       k.t += dt;
       k.life -= dt;
       const d = dist(k, p);
-      const R = k.kind === 'xp' ? this.stats.pickupRadius * 2 : this.stats.pickupRadius;
+      const R = k.kind === 'xp' ? this.stats.pickupRadius * 3.5 : this.stats.pickupRadius;
       if (d < R) {
         const a = Math.atan2(p.y - k.y, p.x - k.x);
-        const sp = 260 + (R - d) * 3;
+        const sp = 420 + (R - d) * 4;
         k.x += Math.cos(a) * sp * dt;
         k.y += Math.sin(a) * sp * dt;
       }

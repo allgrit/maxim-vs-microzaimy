@@ -180,6 +180,12 @@ export function drawEnemy(ctx, e, t, rng) {
   const flash = e.hitFlash > 0;
   switch (e.type) {
     case 'contract': {
+      ctx.globalAlpha = 0.22 + Math.sin(t * 6 + e.phase) * 0.08;
+      ctx.fillStyle = '#d7263d';
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, 6.28);
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.rotate(Math.sin(e.t * 6 + e.phase) * 0.25);
       ctx.fillStyle = flash ? '#ffe' : '#fff8e7';
       ctx.strokeStyle = '#2b2d42';
@@ -193,6 +199,13 @@ export function drawEnemy(ctx, e, t, rng) {
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(4, 7, 4, 0, 6.28);
+      ctx.stroke();
+      // подпись-крючок: красная галочка «подпишите»
+      ctx.strokeStyle = '#d7263d';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-7, 9);
+      ctx.bezierCurveTo(-3, 3, 1, 12, 7, 6);
       ctx.stroke();
       if (e.revealed) label(ctx, 'банк', 0, -22, 9, '#fff', '#d7263d');
       break;
@@ -473,15 +486,23 @@ export function drawPickup(ctx, k, t) {
   ctx.save();
   ctx.translate(k.x, k.y);
   if (k.kind === 'xp') {
-    ctx.rotate(k.t * 3);
-    ctx.fillStyle = '#fff8e7';
-    ctx.strokeStyle = '#2b2d42';
-    ctx.lineWidth = 1.5;
+    const pulse = 0.8 + Math.sin(t * 8 + k.id) * 0.2;
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#ffd166';
     ctx.beginPath();
-    ctx.moveTo(-4, -5);
-    ctx.lineTo(5, -3);
-    ctx.lineTo(3, 5);
-    ctx.lineTo(-5, 3);
+    ctx.arc(0, 0, 9 * pulse, 0, 6.28);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.rotate(k.t * 2);
+    ctx.fillStyle = '#ffe74c';
+    ctx.strokeStyle = '#b8860b';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const r = i % 2 ? 2.2 : 6 * pulse;
+      const a = (i / 8) * 6.28;
+      ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -992,8 +1013,18 @@ export function drawTutorial(ctx, step, game, t, isTouch) {
     }
   } else if (step === 'dash') {
     counterIcon(ctx, p.x, p.y - 52, 'dash', t);
-    const k = (t * 1.5) % 1;
-    chevron(ctx, p.x + 30 + k * 40, p.y, 0, 18, '#35a7ff', 1 - k);
+    // призрак Максима срывается в сторону и растворяется — так выглядит рывок
+    const k = (t * 1.1) % 1;
+    const dir = p.face || 1;
+    for (let j = 0; j < 4; j++) {
+      const kk = Math.max(0, k - j * 0.08);
+      ctx.globalAlpha = (1 - k) * (0.6 - j * 0.12);
+      ctx.fillStyle = '#35a7ff';
+      ctx.beginPath();
+      ctx.arc(p.x + dir * kk * 130, p.y - 6, 15, 0, 6.28);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   } else if (step === 'refuse') {
     counterIcon(ctx, p.x, p.y - 52, 'refuse', t);
     ctx.strokeStyle = `rgba(53,167,255,${1 - (t * 1.2 % 1)})`;

@@ -1,4 +1,13 @@
 // Клавиатура + тач-джойстик + кнопки. Выдаёт вектор движения и однократные действия.
+// Тач-кнопки шлют действие по имени, поэтому имя действия обязано быть в списке его клавиш.
+export const ACTION_KEYS = {
+  dash: ['Shift', 'ShiftLeft', 'ShiftRight', 'dash'],
+  refuse: [' ', 'refuse'],
+  ult: ['e', 'ult'],
+  pause: ['Escape', 'p', 'pause'],
+  mute: ['m', 'mute'],
+};
+
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
@@ -76,8 +85,7 @@ export class Input {
   }
 
   consume(action) {
-    const keyMap = { dash: ['Shift', 'ShiftLeft', 'ShiftRight'], refuse: [' ', 'refuse'], ult: ['e', 'ult'], pause: ['Escape', 'p', 'pause'], mute: ['m'] };
-    const keys = keyMap[action] || [action];
+    const keys = ACTION_KEYS[action] || [action];
     for (const k of keys) {
       if (this.pressed.has(k)) {
         this.pressed.delete(k);
