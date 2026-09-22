@@ -1,0 +1,11 @@
+{
+  "name": "maxim-vs-microzaimy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Максим против микрозаймов — сатирическая аркада-выживалка",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "serve": "npx --yes http-server -p 8080 -c-1 ."
+  }
+}

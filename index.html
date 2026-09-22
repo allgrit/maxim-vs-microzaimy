@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Максим против микрозаймов</title>
+  <meta name="description" content="Сатирическая аркада: на Максима оформили микрозайм без его ведома. Уклоняйся от договоров, рви бумаги, закрывай поп-апы и дойди до полиции.">
+  <meta property="og:title" content="Максим против микрозаймов">
+  <meta property="og:description" content="Рви договоры, уклоняйся от коллекторов, подай заявление в полицию. Роглайт-выживалка на злобу дня.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='12' y='6' width='40' height='52' rx='4' fill='%23fff8e7' stroke='%232b2d42' stroke-width='4'/%3E%3Ccircle cx='40' cy='44' r='8' fill='none' stroke='%23d7263d' stroke-width='4'/%3E%3Cpath d='M8 8l48 48M56 8L8 56' stroke='%23d7263d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" width="1000" height="640"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-block">
+          <div class="bar-label"><span>Нервы</span><span id="nervesText">100</span></div>
+          <div class="bar"><div id="nervesBar" class="bar-fill nerves"></div></div>
+          <div class="bar-label"><span>Долг <small id="interestText"></small></span><span id="debtText">0 ₽</span></div>
+          <div class="bar"><div id="debtBar" class="bar-fill debt"></div></div>
+          <div class="bar-label"><span>Улики · ур. <b id="levelText">1</b></span><span id="xpText"></span></div>
+          <div class="bar"><div id="xpBar" class="bar-fill xp"></div></div>
+        </div>
+        <div class="hud-center">
+          <div id="dayText" class="day">День 1</div>
+          <div class="bar day-bar"><div id="dayBar" class="bar-fill day"></div></div>
+          <div id="modText" class="mod"></div>
+        </div>
+        <div class="hud-block right">
+          <div class="score"><span id="scoreText">0</span></div>
+          <div id="comboText" class="combo"></div>
+          <div id="missions" class="missions"></div>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <div class="skill" id="skillDash"><div class="cd"></div><span class="key">Shift</span><span class="name">Рывок</span><span class="charges" id="dashCharges"></span></div>
+        <div class="skill" id="skillRefuse"><div class="cd"></div><span class="key">Пробел</span><span class="name">Отказ!</span></div>
+        <div class="skill ult" id="skillUlt"><div class="cd"></div><span class="key">E</span><span class="name">В полицию</span></div>
+        <button id="btnPause" class="icon-btn" title="Пауза (Esc)">II</button>
+      </div>
+    </div>
+
+    <!-- Меню -->
+    <div id="menu" class="screen">
+      <div class="panel wide">
+        <h1 class="title"><span class="t1">Максим</span> <span class="t2">против</span> <span class="t3">микрозаймов</span></h1>
+        <p class="tagline">На Максима оформили микрозайм без его ведома. Теперь ему должны все. Точнее, он всем. Рви бумаги, уклоняйся, иди в полицию.</p>
+        <div class="menu-grid">
+          <div class="menu-col">
+            <h3>Забег</h3>
+            <div class="diff-list" id="diffList"></div>
+            <button id="btnStart" class="btn primary big">Начать забег</button>
+            <button id="btnDaily" class="btn accent">Ежедневный вызов <small id="dailyLabel"></small></button>
+          </div>
+          <div class="menu-col">
+            <h3>Профиль</h3>
+            <div class="stat-row"><span>Репутация</span><b id="repText">0</b></div>
+            <div class="stat-row"><span>Лучший день</span><b id="bestDayText">0</b></div>
+            <div class="stat-row"><span>Порвано всего</span><b id="tornText">0</b></div>
+            <div class="stat-row"><span>Стиль</span><b id="styleText">В кепке</b></div>
+            <button id="btnShop" class="btn">Юридическая консультация</button>
+            <button id="btnBoard" class="btn">Лидерборд</button>
+            <button id="btnHow" class="btn">Как играть</button>
+            <button id="btnMute" class="btn ghost">🔊 Звук</button>
+          </div>
+        </div>
+        <p class="footer">Управление: WASD или стрелки · Shift рывок · Пробел «Отказ!» · E заявление · Esc пауза. На телефоне — левая половина экрана джойстик, кнопки справа.</p>
+      </div>
+    </div>
+
+    <!-- Как играть -->
+    <div id="howto" class="screen hidden">
+      <div class="panel wide scroll">
+        <h2>Как не подписать ничего лишнего</h2>
+        <div class="how-grid">
+          <div><b>📄 Договор</b> летит в тебя. Касание — подпись, +долг. Максим рвёт всё в радиусе рук сам.</div>
+          <div><b>🧑‍💼 Промоутер</b> кружит и кидает листовки. Листовка — тоже подпись.</div>
+          <div><b>📞 Звонок</b> растит кольцо: внутри медленно и больно. Рывок сквозь центр — сброс.</div>
+          <div><b>💬 СМС-спам</b> — быстрые пули из-за края. Бьют по нервам.</div>
+          <div><b>✍ «Подпишите здесь»</b> — пятно на полу. Постоишь — подпишешь. Стирается «Отказом».</div>
+          <div><b>🪟 Поп-ап</b> плывёт за тобой и закрывает обзор. Крестик или «Отказ!».</div>
+          <div><b>⛓ Коллектор</b> бьёт и кидает цепь. Рывок рвёт цепь.</div>
+          <div><b>🍵 «Мы из банка»</b> — мимик под чай. Настоящий чай не дрожит.</div>
+          <div><b>🚁 Дрон</b> сбрасывает договоры по дороге.</div>
+          <div><b>🤖 Автодозвон</b> порождает звонки. Сломать.</div>
+        </div>
+        <h3>Две шкалы поражения</h3>
+        <p><b>Нервы</b> — здоровье. <b>Долг</b> — растёт от подписей и капает процентами сам. Дошёл до лимита — банкротство. Ульта «Заявление в полицию» чистит экран и списывает 20% долга.</p>
+        <h3>Прогресс</h3>
+        <p>Улики → уровень → перк из трёх. Каждый 5-й день — босс. Репутация после забега открывает постоянные бонусы. День без подписи — бонус «Чистый день». Серия разрывов — множитель очков до ×5.</p>
+        <button class="btn primary back">Назад</button>
+      </div>
+    </div>
+
+    <!-- Магазин -->
+    <div id="shop" class="screen hidden">
+      <div class="panel wide scroll">
+        <h2>Юридическая консультация</h2>
+        <p class="muted">Репутация: <b id="shopRep">0</b>. Постоянные улучшения между забегами.</p>
+        <div id="shopList" class="shop-list"></div>
+        <h3>Стиль Максима</h3>
+        <div id="styleList" class="style-list"></div>
+        <h3>Достижения</h3>
+        <div id="achList" class="ach-list"></div>
+        <button class="btn primary back">Назад</button>
+      </div>
+    </div>
+
+    <!-- Лидерборд -->
+    <div id="board" class="screen hidden">
+      <div class="panel wide scroll">
+        <h2>Лидерборд</h2>
+        <div class="tabs" id="boardTabs"></div>
+        <div id="boardList" class="board-list"></div>
+        <p class="muted small">Таблица хранится в этом браузере. Ежедневный вызов одинаков у всех — обменивайтесь результатом текстом.</p>
+        <button class="btn primary back">Назад</button>
+      </div>
+    </div>
+
+    <!-- Левел-ап -->
+    <div id="levelup" class="screen hidden">
+      <div class="panel">
+        <h2>Уровень <span id="lvlNum"></span>! Выбери перк</h2>
+        <div id="choices" class="choices"></div>
+        <button id="btnReroll" class="btn ghost">Реролл (<span id="rerollCount">0</span>)</button>
+      </div>
+    </div>
+
+    <!-- Переход дня -->
+    <div id="transition" class="screen hidden">
+      <div class="newspaper">
+        <div class="np-head">ВЕСТНИК ДОЛЖНИКА</div>
+        <div class="np-day" id="npDay">День 2</div>
+        <div class="np-headline" id="npHeadline"></div>
+        <div class="np-mod" id="npMod"></div>
+        <div class="np-boss hidden" id="npBoss"></div>
+        <div class="np-hint">нажми любую клавишу или тапни</div>
+      </div>
+    </div>
+
+    <!-- Пауза -->
+    <div id="pause" class="screen hidden">
+      <div class="panel">
+        <h2>Пауза</h2>
+        <div id="pausePerks" class="perk-list"></div>
+        <div class="row">
+          <button id="btnResume" class="btn primary">Продолжить</button>
+          <button id="btnQuit" class="btn ghost">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Конец забега -->
+    <div id="gameover" class="screen hidden">
+      <div class="panel wide">
+        <h2 id="goTitle">Банкротство</h2>
+        <p id="goSub" class="muted"></p>
+        <div class="go-score"><span id="goScore">0</span><small>очков</small></div>
+        <div id="goRank" class="rank"></div>
+        <div class="go-stats" id="goStats"></div>
+        <div id="goMissions" class="missions-final"></div>
+        <div id="goAch" class="ach-new"></div>
+        <div class="row">
+          <button id="btnAgain" class="btn primary">Ещё раз</button>
+          <button id="btnShare" class="btn accent">Поделиться</button>
+          <button id="btnMenu" class="btn ghost">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Победа -->
+    <div id="victory" class="screen hidden">
+      <div class="panel wide">
+        <div class="stamp-big">ЗАЯВЛЕНИЕ ПРИНЯТО</div>
+        <h2>Дело закрыто</h2>
+        <p>Кредитная история порвана. Полиция приняла заявление, МФО в шоке, Витёк в бегах. Максим наконец-то пьёт чай, который действительно чай.</p>
+        <p class="muted">Но бумаги не кончаются никогда. Можно продолжить в бесконечном режиме — боссы возвращаются сильнее.</p>
+        <div class="row">
+          <button id="btnEndless" class="btn primary">Бесконечный режим</button>
+          <button id="btnFinish" class="btn accent">Завершить и записать результат</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Тач-кнопки -->
+    <div id="touch" class="hidden">
+      <button class="tbtn" data-action="dash"><div class="cd"></div><span>Рывок</span></button>
+      <button class="tbtn" data-action="refuse"><div class="cd"></div><span>Отказ!</span></button>
+      <button class="tbtn ult" data-action="ult"><div class="cd"></div><span>Полиция</span></button>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
