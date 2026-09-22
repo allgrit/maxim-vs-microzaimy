@@ -22,6 +22,24 @@ export function defaultProfile() {
   };
 }
 
+// Повреждённый, но синтаксически верный JSON не должен ронять игру: чиним типы полей.
+export function normalizeProfile(parsed) {
+  const d = defaultProfile();
+  const p = { ...d, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+  for (const k of ['achievements', 'seenHints']) if (!Array.isArray(p[k])) p[k] = [];
+  for (const k of ['reputation', 'totalTorn', 'totalBosses', 'bestCombo', 'bestDay', 'bestDayNightmare', 'bestCleanStreak', 'runs']) {
+    if (typeof p[k] !== 'number' || !Number.isFinite(p[k])) p[k] = 0;
+  }
+  if (!p.meta || typeof p.meta !== 'object') p.meta = {};
+  if (typeof p.style !== 'string') p.style = 'cap';
+  const lb = p.leaderboards && typeof p.leaderboards === 'object' ? p.leaderboards : {};
+  p.leaderboards = { ...d.leaderboards };
+  for (const k of ['easy', 'normal', 'nightmare']) p.leaderboards[k] = Array.isArray(lb[k]) ? lb[k].filter((e) => e && typeof e.score === 'number') : [];
+  p.leaderboards.daily = lb.daily && typeof lb.daily === 'object' && !Array.isArray(lb.daily) ? lb.daily : {};
+  for (const k of Object.keys(p.leaderboards.daily)) if (!Array.isArray(p.leaderboards.daily[k])) delete p.leaderboards.daily[k];
+  return p;
+}
+
 export function createStore(storage) {
   return {
     load() {
@@ -29,7 +47,7 @@ export function createStore(storage) {
         const raw = storage.getItem(KEY);
         if (!raw) return defaultProfile();
         const parsed = JSON.parse(raw);
-        return { ...defaultProfile(), ...parsed, leaderboards: { ...defaultProfile().leaderboards, ...(parsed.leaderboards || {}) } };
+        return normalizeProfile(parsed);
       } catch {
         return defaultProfile();
       }

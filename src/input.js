@@ -16,6 +16,7 @@ export class Input {
     this.touchButtons = {};
     this.canvas = canvas;
     this.enabled = true;
+    this.onTap = null; // (event) => boolean — перехват тапа по игровому объекту до старта джойстика
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -26,11 +27,17 @@ export class Input {
     window.addEventListener('keyup', (e) => this.keys.delete(this.norm(e)));
     window.addEventListener('blur', () => this.keys.clear());
 
-    canvas.addEventListener('pointerdown', (e) => {
+    // Джойстик стартует с любой точки игрового контейнера, кроме кнопок и экранов меню:
+    // на телефоне палец часто ложится ниже арены.
+    const surface = canvas.parentElement || canvas;
+    surface.addEventListener('pointerdown', (e) => {
+      if (!this.enabled) return;
+      if (e.target.closest && e.target.closest('button, .screen, .tbtn, .icon-btn')) return;
       if (e.pointerType === 'mouse') {
-        this.pressed.add('refuse');
+        if (e.target === canvas) this.pressed.add('refuse');
         return;
       }
+      if (this.onTap && this.onTap(e)) return;
       if (!this.joy.active) {
         this.joy = { active: true, id: e.pointerId, cx: e.clientX, cy: e.clientY, dx: 0, dy: 0 };
       }

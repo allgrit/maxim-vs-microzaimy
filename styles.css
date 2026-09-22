@@ -21,8 +21,10 @@ html, body {
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
-  touch-action: none;
 }
+/* Жесты браузера запрещаем только на игровой поверхности; экраны меню прокручиваются пальцем */
+#game, #touch, .tbtn { touch-action: none; }
+.screen { touch-action: pan-y; }
 
 #app {
   position: relative;
@@ -305,7 +307,7 @@ html, body { height: 100dvh; }
   .hud-top { flex-wrap: wrap; top: max(6px, env(safe-area-inset-top)); left: 6px; right: 6px; gap: 6px; }
   .hud-block { width: calc(50% - 3px); padding: 6px 8px; font-size: 11px; }
   .hud-center { order: 3; width: 100%; padding: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
-  .day { font-size: 15px; }
+  .day { font-size: 13px; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .day-bar { width: 110px; margin: 0; }
   .mod { font-size: 10px; }
   .score { font-size: 18px; }

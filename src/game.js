@@ -2,6 +2,7 @@ import { DAY_LENGTH, DEBT_LIMIT_BASE, INTEREST_RATE_BASE, ULT_CHARGE_NEEDED, ENE
 import { createRng } from './core/rng.js';
 import { spawnInterval, enemyHpScale, enemySpeedScale, isBossDay, bossForDay, pickEnemy, pickModifier, sceneForDay, difficultyFor } from './core/waves.js';
 import { computeStats, rollChoices, xpForLevel, STYLES } from './core/upgrades.js';
+const ENTITY_CAP = 200;
 import { createCombo, comboHit, comboTick, comboMultiplier, pointsFor } from './core/score.js';
 import { rollMissions, checkMissions, emptyRunStats } from './core/missions.js';
 
@@ -20,15 +21,18 @@ export class Game {
     this.difficultyId = difficulty;
     this.daily = daily;
     this.seed = seed || `run-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    this.rng = createRng(this.seed);
+    this.rng = createRng(this.seed); // волны, модификаторы, миссии — общие для ежедневного вызова
+    this.rngPerks = createRng(`${this.seed}-perks`);
+    this.rngFx = createRng(`${this.seed}-fx-${Date.now()}`); // косметика: реплики, разброс улик
     this.profile = profile;
     this.audio = audio;
     this.fx = fx;
     this.input = input;
     this.hooks = hooks;
 
-    const meta = profile.meta || {};
-    this.style = STYLES.find((s) => s.id === profile.style) || STYLES[0];
+    // Ежедневный вызов: общие условия для всех — без мета-бонусов и стиля.
+    const meta = daily ? {} : (profile.meta || {});
+    this.style = daily ? STYLES[0] : (STYLES.find((s) => s.id === profile.style) || STYLES[0]);
     this.taken = [];
     this.stats = computeStats(this.taken, meta, this.style);
     this.rerolls = meta.reroll || 0;
@@ -39,6 +43,7 @@ export class Game {
       dashTimer: 0, dashCd: 0, dashCharges: this.stats.dashCharges, dashDir: [1, 0],
       refuseCd: 0, invuln: 0, stun: 0, slow: 1, chained: null, face: 1, hurtFlash: 0,
       inverted: 0, pulled: null, tearTimer: 0, signFlash: 0, trailT: 0, walk: 0,
+      kx: 0, ky: 0, slowNext: 1, tearTarget: null, tearInterval: 0.45, tearFlash: null,
     };
     this.ult = (meta.startUlt || 0) * 0.25 * ULT_CHARGE_NEEDED;
     this.ultActive = 0;
@@ -64,7 +69,6 @@ export class Game {
     this.missions = rollMissions(this.rng);
     this.daySigned = false;
     this.cleanStreak = 0;
-    this.bossHurtThisFight = false;
     this.phase = 'play';
     this.pendingChoices = null;
     this.won = false;
@@ -76,15 +80,36 @@ export class Game {
     this.pendingLevelUps = meta.startLevel || 0;
     this.tutorial = false; // первый забег: медленный старт, пока игрок не освоил разрыв
     this.tutorialStep = null; // id текущего шага — для отрисовки подсказок
-    this.spotlight = null; // { x, y, r, label, counter, t, dur, target }
+    this.spotlight = null; // { label, counter, t, dur, target }
+    this.pendingSpots = []; // подсказки, ждущие появления цели в кадре
+    this.massKill = false; // ульта: облегчённые эффекты при массовом уничтожении
     this.runStats.moved = 0;
   }
 
-  // Спотлайт: короткое замедление и подсветка нового объекта.
-  showSpotlight(target, hint) {
-    this.spotlight = { target, label: hint.label, counter: hint.counter, t: 0, dur: 1.6 };
+  // Спотлайт: короткое замедление и подсветка нового объекта — когда он уже в кадре.
+  queueSpotlight(kind, target, hint) {
+    if (this.pendingSpots.some((q) => q.kind === kind)) return;
+    this.pendingSpots.push({ kind, target, hint });
+  }
+
+  inView(o) {
+    return o.x > 10 && o.x < world.W - 10 && o.y > world.safeTop + 10 && o.y < world.H - 10;
+  }
+
+  updateSpotlights(rawDt) {
+    if (this.spotlight) {
+      this.spotlight.t += rawDt;
+      if (this.spotlight.t >= this.spotlight.dur || this.spotlight.target.dead) this.spotlight = null;
+    }
+    this.pendingSpots = this.pendingSpots.filter((q) => !q.target.dead);
+    if (this.spotlight || !this.pendingSpots.length) return;
+    const idx = this.pendingSpots.findIndex((q) => this.inView(q.target));
+    if (idx < 0) return;
+    const [q] = this.pendingSpots.splice(idx, 1);
+    this.spotlight = { target: q.target, label: q.hint.label, counter: q.hint.counter, t: 0, dur: 1.6 };
     this.slowmo = Math.max(this.slowmo, 1.3);
     this.audio.click();
+    if (this.hooks.onSpotlight) this.hooks.onSpotlight(q.kind);
   }
 
   // Смена ориентации: пропорционально перенести всё на новую арену.
@@ -93,7 +118,7 @@ export class Game {
     const ky = nh / world.H;
     const mv = (o) => { o.x *= kx; o.y *= ky; };
     mv(this.player);
-    for (const e of this.enemies) mv(e);
+    for (const e of this.enemies) { mv(e); if (e.baseY !== undefined) e.baseY *= ky; }
     for (const e of this.projectiles) mv(e);
     for (const e of this.pickups) mv(e);
     for (const e of this.zones) mv(e);
@@ -133,8 +158,8 @@ export class Game {
 
   quote(kind) {
     const late = this.tension() > 0.45 || this.day >= 12;
-    const q = (late && this.rng.chance(0.7) ? ENEMY_QUOTES_LATE[kind] : null) || ENEMY_QUOTES[kind];
-    return q ? this.rng.pick(q) : '';
+    const q = (late && this.rngFx.chance(0.7) ? ENEMY_QUOTES_LATE[kind] : null) || ENEMY_QUOTES[kind];
+    return q ? this.rngFx.pick(q) : '';
   }
 
   headline() {
@@ -145,6 +170,10 @@ export class Game {
   // ---------- СПАВН ----------
   spawnEnemy(type, pos = null, extra = {}) {
     const def = ENEMIES[type];
+    // Общий лимит сущностей: лёгкие враги при переполнении не создаются (заглушка, чтобы вызывающие не падали).
+    const light = type === 'contract' || type === 'sms' || type === 'call' || type === 'mimic' || type === 'trap';
+    if (this.enemies.length >= ENTITY_CAP && light) return { dead: true, x: 0, y: 0, type };
+    if (this.enemies.length >= ENTITY_CAP + 40) return { dead: true, x: 0, y: 0, type };
     const hpScale = enemyHpScale(this.day, this.diff);
     const spScale = enemySpeedScale(this.day);
     const p = pos || (['call', 'trap', 'mimic', 'robocall'].includes(type) ? this.randomInnerPos() : this.randomEdgePos());
@@ -208,14 +237,14 @@ export class Game {
     const mult = this.modifier.xp || 1;
     const count = Math.max(1, Math.round(n * mult));
     for (let i = 0; i < count; i++) {
-      this.pickups.push({ id: uid++, kind: 'xp', x: x + this.rng.range(-14, 14), y: y + this.rng.range(-14, 14), t: 0, life: 18, value: 1 });
+      this.pickups.push({ id: uid++, kind: 'xp', x: x + this.rngFx.range(-14, 14), y: y + this.rngFx.range(-14, 14), t: 0, life: 18, value: 1 });
     }
   }
 
   // ---------- ПОДПИСЬ / УРОН ----------
   sign(amount, source = '') {
     const p = this.player;
-    if (p.invuln > 0) return false;
+    if (this.phase !== 'play' || p.invuln > 0) return false;
     const scaled = Math.round(amount * (1 + this.day * 0.05));
     this.debt += scaled;
     this.daySigned = true;
@@ -230,6 +259,7 @@ export class Game {
     this.fx.ring(p.x, p.y, 10, 70, '#d7263d', 0.4, 4);
     this.audio.sign();
     if (source) this.fx.text(p.x, p.y - 52, source, '#ffd6dc', 12, 1);
+    if (this.debt >= this.debtLimit) this.gameOver('debt');
     return true;
   }
 
@@ -249,19 +279,18 @@ export class Game {
 
   hurt(amount, knock = null) {
     const p = this.player;
-    if (p.invuln > 0) return false;
+    if (this.phase !== 'play' || p.invuln > 0) return false;
     p.nerves -= amount;
     p.hurtFlash = 0.3;
     p.invuln = 0.5;
     this.runStats.damageTaken += amount;
-    this.bossHurtThisFight = true;
     this.fx.flash('#ff8c42', 0.2);
     this.fx.shake(6);
     this.fx.text(p.x, p.y - 30, `−${amount}`, '#ffb347', 18, 0.9);
     this.audio.hurt();
     if (knock) {
-      p.vx += knock[0];
-      p.vy += knock[1];
+      p.kx += knock[0];
+      p.ky += knock[1];
     }
     if (p.nerves <= 0) this.gameOver('nerves');
     return true;
@@ -284,11 +313,15 @@ export class Game {
       comboHit(this.combo);
       this.runStats.torn++;
       this.runStats.bestCombo = Math.max(this.runStats.bestCombo, this.combo.best);
-      this.ult = Math.min(ULT_CHARGE_NEEDED, this.ult + 1 * this.stats.ultGain);
+      if (cause !== 'ult') this.ult = Math.min(ULT_CHARGE_NEEDED, this.ult + 1 * this.stats.ultGain);
       if (this.stats.refundPerTear) this.debt = Math.max(0, this.debt - this.stats.refundPerTear);
-      this.fx.shreds(e.x, e.y, 7, '#fff8e7');
-      this.fx.shreds(e.x, e.y, 2, '#d7263d');
-      this.audio.tear();
+      if (this.massKill) {
+        this.fx.shreds(e.x, e.y, 2, '#fff8e7');
+      } else {
+        this.fx.shreds(e.x, e.y, 7, '#fff8e7');
+        this.fx.shreds(e.x, e.y, 2, '#d7263d');
+        this.audio.tear();
+      }
       this.dropXp(e.x, e.y, 1);
       if (this.stats.shredChance > 0 && cause === 'tear' && this.rng.chance(this.stats.shredChance)) {
         const near = this.enemies.find((o) => !o.dead && o !== e && (o.type === 'contract' || o.type === 'flyer') && dist(o, e) < 90);
@@ -435,11 +468,15 @@ export class Game {
     this.fx.shake(14);
     this.fx.text(this.player.x, this.player.y - 60, 'ЗАЯВЛЕНИЕ В ПОЛИЦИЮ!', '#9be1ff', 26, 1.6);
     this.fx.ring(this.player.x, this.player.y, 20, 700, '#2b5fd9', 0.8, 8);
+    this.massKill = true;
     for (const e of this.enemies) {
       if (e.dead) continue;
       if (e.type === 'mimic') { e.type = 'contract'; this.runStats.mimics++; }
       this.killEnemy(e, 'ult');
     }
+    this.massKill = false;
+    this.audio.tear();
+    this.audio.stamp();
     this.projectiles = [];
     this.zones = this.zones.filter((z) => z.kind !== 'stakingPull');
     this.debt = Math.round(this.debt * 0.8);
@@ -449,10 +486,26 @@ export class Game {
     }
   }
 
+  // Тап по крестику поп-апа (мировые координаты). Возвращает true, если попали.
+  tapAt(x, y) {
+    if (this.phase !== 'play') return false;
+    for (const e of this.enemies) {
+      if (e.dead || e.type !== 'popup') continue;
+      const bx = e.x + e.w / 2 - 14;
+      const by = e.y - e.h / 2 + 14;
+      if (Math.hypot(x - bx, y - by) < 26) {
+        e.hp = 0;
+        this.killEnemy(e, 'x');
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ---------- ЛЕВЕЛ-АП ----------
   queueLevelUp() {
     if (this.phase !== 'play') return;
-    const choices = rollChoices(this.rng, this.taken);
+    const choices = rollChoices(this.rngPerks, this.taken);
     if (choices.length === 0) {
       this.pendingLevelUps = 0;
       this.heal(15);
@@ -468,7 +521,7 @@ export class Game {
   rerollChoices() {
     if (this.rerolls <= 0 || this.phase !== 'levelup') return null;
     this.rerolls--;
-    this.pendingChoices = rollChoices(this.rng, this.taken);
+    this.pendingChoices = rollChoices(this.rngPerks, this.taken);
     return this.pendingChoices;
   }
 
@@ -540,7 +593,6 @@ export class Game {
       timers: { a: 2.5, b: 6, c: 4, d: 8 }, stun: 0, phase2: false, dead: false, hitFlash: 0,
       angle: 0, chargeDir: null, charging: 0, beamA: 0, target: null, scale: 1,
     };
-    this.bossHurtThisFight = false;
     this.audio.bossAppear();
     this.fx.shake(12);
     this.fx.flash('#000', 0.4);
@@ -594,6 +646,8 @@ export class Game {
     if (this.day === FINAL_BOSS_DAY && !this.endless) {
       this.won = true;
       this.phase = 'victory';
+      this.enemies = [];
+      this.projectiles = [];
       this.audio.victory();
       if (this.hooks.onVictory) this.hooks.onVictory(this.result());
       return;
@@ -623,8 +677,8 @@ export class Game {
     }
   }
 
-  boss_director(b, p) {
-    b.x += Math.sin(b.t * 0.8) * 1.4;
+  boss_director(b, p, dt) {
+    b.x += Math.sin(b.t * 0.8) * 84 * dt;
     b.y = world.safeTop + 110 + Math.sin(b.t * 1.3) * 12;
     if (b.timers.a <= 0) {
       b.timers.a = 2.4;
@@ -698,13 +752,12 @@ export class Game {
       if (proj > 0 && proj < 700) {
         const perp = Math.abs(px * dy - py * dx);
         if (perp < p.r + 8) {
-          p.slow = Math.min(p.slow, 0.6);
-          if (p.invuln <= 0) {
+          p.slowNext = Math.min(p.slowNext, 0.6);
+          if (p.invuln <= 0 && this.phase === 'play') {
             p.nerves -= 12 * dt;
             p.hurtFlash = 0.1;
             this.runStats.damageTaken += 12 * dt;
-            this.bossHurtThisFight = true;
-            if (p.nerves <= 0) this.gameOver('nerves');
+                    if (p.nerves <= 0) this.gameOver('nerves');
           }
         }
       }
@@ -730,8 +783,8 @@ export class Game {
     }
   }
 
-  boss_microcoin(b, p) {
-    b.y += Math.sin(b.t * 3) * 0.6;
+  boss_microcoin(b, p, dt) {
+    b.y += Math.sin(b.t * 3) * 36 * dt;
     if (b.timers.a <= 0) {
       b.timers.a = b.phase2 ? 2.4 : 3.2;
       this.fx.sparks(b.x, b.y, 20, '#61a88f', 300);
@@ -825,7 +878,7 @@ export class Game {
       }
       if (z.kind === 'stakingPull') {
         const d = dist(z, p);
-        if (d < z.r && p.dashTimer <= 0) {
+        if (d < z.r && d > 4 && p.dashTimer <= 0) {
           p.pulled = [(z.x - p.x) / d * z.pull, (z.y - p.y) / d * z.pull];
         }
       }
@@ -837,10 +890,7 @@ export class Game {
   update(rawDt) {
     if (this.phase !== 'play') return;
     let dt = rawDt;
-    if (this.spotlight) {
-      this.spotlight.t += rawDt;
-      if (this.spotlight.t >= this.spotlight.dur || this.spotlight.target.dead) this.spotlight = null;
-    }
+    this.updateSpotlights(rawDt);
     if (this.slowmo > 0) {
       this.slowmo -= rawDt;
       dt = rawDt * (this.spotlight ? 0.2 : 0.3);
@@ -863,9 +913,12 @@ export class Game {
     }
     if (inp.consume('refuse')) this.refuse();
     if (inp.consume('ult')) this.activateUlt();
+    if (this.phase !== 'play') return;
 
     // --- движение ---
-    p.slow = 1;
+    // Замедления, назначенные после интеграции в прошлом кадре, действуют в этом.
+    p.slow = p.slowNext;
+    p.slowNext = 1;
     if (p.dashTimer > 0) {
       p.dashTimer -= dt;
       p.x += p.dashDir[0] * 720 * dt;
@@ -916,6 +969,7 @@ export class Game {
     for (const e of this.enemies) {
       if (!e.dead && e.type === 'call' && dist(e, p) < e.ringNow) {
         p.slow = Math.min(p.slow, 0.55);
+        p.slowNext = Math.min(p.slowNext, 0.55);
         if (p.invuln <= 0) {
           p.nerves -= 6 * dt;
           this.runStats.damageTaken += 6 * dt;
@@ -924,9 +978,12 @@ export class Game {
       }
     }
     if (p.dashTimer <= 0) {
-      p.x += p.vx * p.slow * dt;
-      p.y += p.vy * p.slow * dt;
+      p.x += (p.vx * p.slow + p.kx) * dt;
+      p.y += (p.vy * p.slow + p.ky) * dt;
     }
+    const kd = Math.max(0, 1 - dt * 7);
+    p.kx *= kd;
+    p.ky *= kd;
     p.x = Math.max(MARGIN, Math.min(world.W - MARGIN, p.x));
     p.y = Math.max(world.safeTop + MARGIN, Math.min(world.H - MARGIN, p.y));
 
@@ -944,9 +1001,10 @@ export class Game {
       if (Math.random() < 0.3) this.fx.flash(Math.random() < 0.5 ? '#2b5fd9' : '#d7263d', 0.12);
     }
 
-    // --- авто-разрыв ---
+    // --- авто-разрыв: одна цель за раз, в ритме tearRate ---
     p.tearTimer -= dt;
-    if (p.tearTimer <= 0) {
+    p.tearInterval = 1 / this.stats.tearRate;
+    {
       const R = this.stats.tearRadius;
       let best = null;
       let bestD = Infinity;
@@ -958,8 +1016,10 @@ export class Game {
       if (this.boss && !this.boss.dead && dist(this.boss, p) - this.boss.r < R) {
         if (!best || bestD > 10) best = this.boss;
       }
-      if (best) {
-        p.tearTimer = 1 / this.stats.tearRate;
+      p.tearTarget = best; // подсвечивается прицелом: игрок видит, кого рвут следующим
+      if (best && p.tearTimer <= 0) {
+        p.tearTimer = p.tearInterval;
+        p.tearFlash = { x: best.x, y: best.y, t: 0.18 };
         if (best === this.boss) {
           this.damageBoss(3);
           this.fx.shreds(best.x + this.rng.range(-20, 20), best.y + this.rng.range(-20, 20), 3, '#fff8e7');
@@ -973,14 +1033,16 @@ export class Game {
             this.audio.tear();
           }
         }
-      } else p.tearTimer = 0.05;
+      } else if (!best) p.tearTimer = Math.min(p.tearTimer, 0.05);
     }
+    if (p.tearFlash) { p.tearFlash.t -= dt; if (p.tearFlash.t <= 0) p.tearFlash = null; }
+    if (this.phase !== 'play') return;
 
     // --- спавн ---
     const bossAlive = this.boss && !this.boss.dead;
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      const tutorialSlow = this.tutorial && this.runStats.torn < 12 ? 2.4 : 1;
+      const tutorialSlow = this.tutorial && this.runStats.torn < 3 ? 3.5 : this.tutorial && this.runStats.torn < 12 ? 2.2 : 1;
       const interval = spawnInterval(this.day, this.dayTime / DAY_LENGTH, this.diff, this.modifier) * (bossAlive ? 2.2 : 1) * tutorialSlow;
       this.spawnTimer = interval;
       if (this.enemies.length < 140) {
@@ -1016,7 +1078,7 @@ export class Game {
         case 'contract': {
           if (e.pushed > 0) {
             e.pushed -= dt;
-            e.vx *= 0.9; e.vy *= 0.9;
+            { const k = Math.pow(0.9, dt * 60); e.vx *= k; e.vy *= k; }
           } else if (e.drift > 0) {
             e.drift -= dt;
           } else {
@@ -1043,8 +1105,7 @@ export class Game {
           if (d > want + 30) { vx = Math.cos(a); vy = Math.sin(a); }
           else if (d < want - 30) { vx = -Math.cos(a); vy = -Math.sin(a); }
           else { vx = Math.cos(orbit); vy = Math.sin(orbit); }
-          e.vx = e.vx * 0.9 + vx * e.speed * 0.1 * 1.5;
-          e.vy = e.vy * 0.9 + vy * e.speed * 0.1 * 1.5;
+          { const k = Math.pow(0.9, dt * 60); e.vx = e.vx * k + vx * e.speed * 1.5 * (1 - k); e.vy = e.vy * k + vy * e.speed * 1.5 * (1 - k); }
           e.x += e.vx * dt; e.y += e.vy * dt;
           e.throwT = (e.throwT ?? 1.2) - dt;
           if (e.throwT <= 0 && d < 340) {
@@ -1081,8 +1142,7 @@ export class Game {
           break;
         }
         case 'popup': {
-          e.vx = e.vx * 0.95 + Math.cos(a) * e.speed * 0.05;
-          e.vy = e.vy * 0.95 + Math.sin(a) * e.speed * 0.05;
+          { const k = Math.pow(0.95, dt * 60); e.vx = e.vx * k + Math.cos(a) * e.speed * (1 - k); e.vy = e.vy * k + Math.sin(a) * e.speed * (1 - k); }
           e.x += e.vx * dt; e.y += e.vy * dt;
           e.x = Math.max(e.w / 2, Math.min(world.W - e.w / 2, e.x));
           e.y = Math.max(e.h / 2, Math.min(world.H - e.h / 2, e.y));
@@ -1092,8 +1152,7 @@ export class Game {
           break;
         }
         case 'collector': {
-          e.vx = e.vx * 0.92 + Math.cos(a) * e.speed * 0.08;
-          e.vy = e.vy * 0.92 + Math.sin(a) * e.speed * 0.08;
+          { const k = Math.pow(0.92, dt * 60); e.vx = e.vx * k + Math.cos(a) * e.speed * (1 - k); e.vy = e.vy * k + Math.sin(a) * e.speed * (1 - k); }
           e.x += e.vx * dt; e.y += e.vy * dt;
           e.chainT -= dt;
           e.quoteT -= dt;

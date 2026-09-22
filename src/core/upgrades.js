@@ -6,7 +6,7 @@ export const UPGRADES = [
   { id: 'sneakers', name: 'Кроссовки', icon: '👟', desc: 'Скорость +10%', max: 4, apply: (s, k) => { s.speed *= 1 + 0.1 * k; } },
   { id: 'doubleDash', name: 'Второй рывок', icon: '💨', desc: '+1 заряд рывка', max: 2, apply: (s, k) => { s.dashCharges += k; } },
   { id: 'loudNo', name: 'Громкий отказ', icon: '📢', desc: 'Радиус «Отказа» +30%, кулдаун −15%', max: 3, apply: (s, k) => { s.refuseRadius *= 1 + 0.3 * k; s.refuseCooldown *= 1 - 0.15 * k; } },
-  { id: 'thickSkin', name: 'Толстая кожа', icon: '🛡️', desc: 'Макс. нервы +20', max: 4, apply: (s, k) => { s.maxNerves += 20 * k; s.healOnPick += 20 * k; } },
+  { id: 'thickSkin', name: 'Толстая кожа', icon: '🛡️', desc: 'Макс. нервы +20', max: 4, apply: (s, k) => { s.maxNerves += 20 * k; } },
   { id: 'lawyer', name: 'Юрист по телефону', icon: '⚖️', desc: 'Проценты −25%', max: 3, apply: (s, k) => { s.interestMult *= 1 - 0.25 * k; } },
   { id: 'shredder', name: 'Шредер', icon: '🗞️', desc: 'Разрыв с шансом 20% рвёт соседний договор', max: 3, apply: (s, k) => { s.shredChance += 0.2 * k; } },
   { id: 'antispam', name: 'Антиспам', icon: '🚫', desc: 'СМС-спам медленнее на 30%', max: 2, apply: (s, k) => { s.smsSlow *= 1 - 0.3 * k; } },
@@ -41,7 +41,6 @@ export function baseStats() {
     regen: 0,
     ultGain: 1,
     refundPerTear: 0,
-    healOnPick: 0,
     scoreMult: 1,
   };
 }
@@ -72,7 +71,8 @@ export function upgradeLevel(taken, id) {
 export function rollChoices(rng, taken, count = 3) {
   const pool = UPGRADES.filter((u) => upgradeLevel(taken, u.id) < u.max);
   const shuffled = rng.shuffle(pool).slice(0, count);
-  return shuffled.map((u) => ({ id: u.id, rare: rng.chance(RARE_CHANCE) }));
+  // Редкий вариант даёт два уровня — предлагаем его, только если до максимума осталось ≥ 2.
+  return shuffled.map((u) => ({ id: u.id, rare: u.max - upgradeLevel(taken, u.id) >= 2 && rng.chance(RARE_CHANCE) }));
 }
 
 export function xpForLevel(level) {

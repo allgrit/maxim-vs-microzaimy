@@ -189,3 +189,23 @@ test('сохранение: профиль, лидерборд топ-10, дос
   assert.equal(applyRunToProfile(p, run, ACHIEVEMENTS).length, 0);
   assert.ok(defaultProfile().leaderboards.daily);
 });
+
+test('редкий перк не превышает максимум уровня', () => {
+  const r = createRng(11);
+  const taken = [{ id: 'doubleDash', rare: false }];
+  for (let i = 0; i < 200; i++) {
+    for (const c of rollChoices(r, taken)) {
+      if (c.id === 'doubleDash') assert.equal(c.rare, false);
+    }
+  }
+});
+
+test('загрузка профиля нормализует повреждённые поля', () => {
+  const st = memoryStorage();
+  st.setItem('maxim-vs-mfo-v1', JSON.stringify({ achievements: null, seenHints: null, leaderboards: { normal: 'x', daily: null }, reputation: 'abc' }));
+  const p = createStore(st).load();
+  assert.ok(Array.isArray(p.achievements) && Array.isArray(p.seenHints));
+  assert.ok(Array.isArray(p.leaderboards.normal));
+  assert.equal(typeof p.leaderboards.daily, 'object');
+  assert.equal(p.reputation, 0);
+});

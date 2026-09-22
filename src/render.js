@@ -509,21 +509,27 @@ export function drawPickup(ctx, k, t) {
   } else if (k.kind === 'tea') {
     drawTea(ctx, t);
   } else if (k.kind === 'cert') {
+    // щит с галочкой — силуэт, не похожий на договор
     const bob = Math.sin(t * 3) * 3;
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#2b5fd9';
-    ctx.lineWidth = 2.5;
-    rr(ctx, -12, -16 + bob, 24, 32, 3);
+    ctx.fillStyle = '#2b5fd9';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -18 + bob);
+    ctx.lineTo(15, -11 + bob);
+    ctx.lineTo(13, 6 + bob);
+    ctx.lineTo(0, 18 + bob);
+    ctx.lineTo(-13, 6 + bob);
+    ctx.lineTo(-15, -11 + bob);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#2b5fd9';
-    ctx.font = `bold 8px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('ОТКАЗ', 0, -4 + bob);
-    ctx.strokeStyle = '#2a9d3a';
+    ctx.strokeStyle = '#6bd425';
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(0, 7 + bob, 5, 0, 6.28);
+    ctx.moveTo(-7, bob);
+    ctx.lineTo(-2, 6 + bob);
+    ctx.lineTo(8, -6 + bob);
     ctx.stroke();
     ctx.strokeStyle = 'rgba(43,95,217,0.5)';
     ctx.beginPath();
@@ -825,15 +831,16 @@ export function drawJoystick(ctx, joy, canvasRect, scale) {
   ctx.save();
   const cx = (joy.cx - canvasRect.left) / scale;
   const cy = (joy.cy - canvasRect.top) / scale;
+  const R = 48 / scale; // радиус хода пальца в CSS-пикселях → игровые единицы
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx, cy, 48, 0, 6.28);
+  ctx.arc(cx, cy, R, 0, 6.28);
   ctx.stroke();
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(cx + joy.dx * 48, cy + joy.dy * 48, 20, 0, 6.28);
+  ctx.arc(cx + joy.dx * R, cy + joy.dy * R, R * 0.42, 0, 6.28);
   ctx.fill();
   ctx.restore();
 }
@@ -1034,4 +1041,58 @@ export function drawTutorial(ctx, step, game, t, isTouch) {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+// Прицел авто-разрыва: кого Максим рвёт следующим и через сколько. Объясняет «по одному в кружке».
+export function drawTearReticle(ctx, p, t) {
+  const tg = p.tearTarget;
+  if (tg && !tg.dead) {
+    const k = 1 - Math.max(0, Math.min(1, p.tearTimer / p.tearInterval)); // заполнение до следующего разрыва
+    const r = (tg.r || 14) + 8;
+    ctx.save();
+    // «руки»: линия от Максима к цели
+    ctx.strokeStyle = 'rgba(255,231,76,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 4);
+    ctx.lineTo(tg.x, tg.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // серое кольцо — фон, жёлтая дуга — прогресс
+    ctx.strokeStyle = 'rgba(43,45,66,0.35)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(tg.x, tg.y, r, 0, 6.28);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffe74c';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(tg.x, tg.y, r, -Math.PI / 2, -Math.PI / 2 + k * 6.28);
+    ctx.stroke();
+    // уголки прицела
+    ctx.strokeStyle = '#2b2d42';
+    ctx.lineWidth = 2;
+    const c = r + 4;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      ctx.beginPath();
+      ctx.moveTo(tg.x + sx * c, tg.y + sy * (c - 6));
+      ctx.lineTo(tg.x + sx * c, tg.y + sy * c);
+      ctx.lineTo(tg.x + sx * (c - 6), tg.y + sy * c);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (p.tearFlash) {
+    const f = p.tearFlash;
+    ctx.save();
+    ctx.globalAlpha = f.t / 0.18;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, 26 - (f.t / 0.18) * 10, 0, 6.28);
+    ctx.stroke();
+    ctx.restore();
+  }
+  void t;
 }

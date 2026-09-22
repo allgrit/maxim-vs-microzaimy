@@ -2,9 +2,9 @@ import { Game, world } from './game.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { FX } from './fx.js';
-import { drawBackground, drawPlayer, drawEnemy, drawPickup, drawProjectile, drawZone, drawBoss, drawBossBar, drawJoystick, drawUltOverlay, drawSpotlight, drawTutorial } from './render.js';
+import { drawBackground, drawPlayer, drawEnemy, drawPickup, drawProjectile, drawZone, drawBoss, drawBossBar, drawJoystick, drawUltOverlay, drawSpotlight, drawTutorial, drawTearReticle } from './render.js';
 import { DIFFICULTIES, TIPS, ULT_CHARGE_NEEDED, ENEMY_HINTS, TUTORIAL_STEPS } from './core/config.js';
-import { createStore, addLeaderboardEntry, getLeaderboard, applyRunToProfile } from './core/save.js';
+import { createStore, memoryStorage, addLeaderboardEntry, getLeaderboard, applyRunToProfile } from './core/save.js';
 import { UPGRADES, META_UPGRADES, STYLES, metaLevel, canBuyMeta, buyMeta, upgradeLevel } from './core/upgrades.js';
 import { ACHIEVEMENTS, missionProgress } from './core/missions.js';
 import { finalScore, reputationFor, formatMoney, formatScore, shareText } from './core/score.js';
@@ -13,7 +13,20 @@ import { dailySeed, createRng } from './core/rng.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const ctx = canvas.getContext('2d');
-const store = createStore(window.localStorage);
+// localStorage может быть запрещён (приватный режим, встроенный браузер): тогда играем на временном профиле.
+let storageVolatile = false;
+function pickStorage() {
+  try {
+    const st = window.localStorage;
+    st.setItem('__mvm_probe', '1');
+    st.removeItem('__mvm_probe');
+    return st;
+  } catch {
+    storageVolatile = true;
+    return memoryStorage();
+  }
+}
+const store = createStore(pickStorage());
 let profile = store.load();
 const audio = new AudioEngine();
 audio.muted = !!profile.muted;
@@ -77,8 +90,13 @@ function toast(text, ms = 1800) {
   t._t = setTimeout(() => t.classList.add('hidden'), ms);
 }
 
+let saveWarned = false;
 function saveProfile() {
-  store.save(profile);
+  const ok = store.save(profile);
+  if ((!ok || storageVolatile) && !saveWarned) {
+    saveWarned = true;
+    toast('Прогресс не сохраняется в этом браузере', 3000);
+  }
 }
 
 // ---------- МЕНЮ ----------
@@ -205,6 +223,7 @@ function startRun(daily) {
       onVictory: () => show('victory'),
       onMissionDone: (m) => toast(`Миссия выполнена: ${m.text}`),
       onFirstSeen: firstSeen,
+      onSpotlight: (kind) => { if (!profile.seenHints.includes(kind)) { profile.seenHints.push(kind); saveProfile(); } },
       onBoss: (b) => toast(`БОСС: ${b.name}`, 2500),
       onBossPhase2: (b) => toast(`ПОВЫШЕНИЕ: ${b.phase2Name}`, 3500),
     },
@@ -262,12 +281,9 @@ function updateTutorial() {
 // Первая встреча с объектом — спотлайт (замедление + кольцо + пиктограмма), один раз на профиль.
 function firstSeen(kind, target) {
   const hint = ENEMY_HINTS[kind];
-  if (!hint || profile.seenHints.includes(kind) || !target) return;
+  if (!hint || profile.seenHints.includes(kind) || !target || target.dead) return;
   if (kind === 'contract' && game.tutorial) return; // договор объясняет шаг обучения
-  if (game.spotlight) return; // не накладывать — покажем при следующем появлении
-  profile.seenHints.push(kind);
-  saveProfile();
-  game.showSpotlight(target, hint);
+  game.queueSpotlight(kind, target, hint); // покажется, когда цель войдёт в кадр
 }
 
 function showLevelUp(choices, rerolls) {
@@ -403,8 +419,20 @@ $('btnFinish').onclick = () => { showGameOver(game.result()); };
 
 // ---------- ТАЧ ----------
 for (const b of document.querySelectorAll('.tbtn')) input.bindButton(b, b.dataset.action);
+input.onTap = (e) => {
+  if (!game) return false;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / scale;
+  const y = (e.clientY - rect.top) / scale;
+  return game.tapAt(x, y);
+};
+// Вкладка ушла в фон — пауза, чтобы не проиграть вслепую.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game && game.phase === 'play') togglePause();
+});
 
 // ---------- HUD ----------
+let lastMissionsHtml = '';
 function updateHud() {
   const h = game.hud();
   $('nervesText').textContent = `${Math.max(0, Math.ceil(h.nerves))}/${h.maxNerves}`;
@@ -418,7 +446,7 @@ function updateHud() {
   $('levelText').textContent = h.level;
   $('xpText').textContent = `${h.xp}/${h.xpNeed}`;
   $('xpBar').style.width = `${(h.xp / h.xpNeed) * 100}%`;
-  $('dayText').textContent = h.bossAlive ? `День ${h.day} · БОСС` : `День ${h.day}`;
+  $('dayText').textContent = h.bossAlive ? (world.safeTop ? (h.boss.phase2 && h.boss.def.phase2Name ? h.boss.def.phase2Name : h.boss.def.name) : `День ${h.day} · БОСС`) : `День ${h.day}`;
   $('dayBar').style.width = h.bossAlive ? `${(h.boss.hp / h.boss.maxHp) * 100}%` : `${(h.dayTime / h.dayLen) * 100}%`;
   $('dayBar').className = `bar-fill ${h.bossAlive ? 'boss' : 'day'}`;
   $('modText').textContent = h.modifier.id === 'none' ? h.scene.name : `${h.modifier.name} · ${h.scene.name}`;
@@ -426,7 +454,8 @@ function updateHud() {
   const ct = $('comboText');
   ct.textContent = h.combo >= 3 ? `серия ${h.combo} · ×${h.comboMult.toFixed(1)}` : '';
   ct.classList.toggle('hot', h.combo >= 20);
-  $('missions').innerHTML = h.missions.map((m) => `<div class="${m.done ? 'done' : ''}">${m.text} <b>${missionProgress(m, h.runStats)}/${m.goal}</b></div>`).join('');
+  const mh = h.missions.map((m) => `<div class="${m.done ? 'done' : ''}">${m.text} <b>${missionProgress(m, h.runStats)}/${m.goal}</b></div>`).join('');
+  if (mh !== lastMissionsHtml) { lastMissionsHtml = mh; $('missions').innerHTML = mh; }
   const dash = $('skillDash');
   dash.classList.toggle('ready', h.dashCharges > 0);
   dash.querySelector('.cd').style.height = h.dashCharges >= h.dashMax ? '0%' : `${(1 - game.player.dashCd / game.stats.dashCooldown) * 100}%`;
@@ -460,7 +489,14 @@ function frame(now) {
     input.endFrame();
     return;
   }
-  if (game.phase === 'play') game.update(dt);
+  // Фиксированный шаг симуляции: поведение не зависит от частоты кадров.
+  if (game.phase === 'play') {
+    acc = Math.min(acc + dt, STEP * 4);
+    while (acc >= STEP && game.phase === 'play') {
+      game.update(STEP);
+      acc -= STEP;
+    }
+  } else acc = 0;
   fx.update(dt);
   render(now / 1000);
   if (game && game.phase === 'play') updateTutorial();
@@ -496,6 +532,8 @@ function drawMenuBackdrop(t) {
   ctx.restore();
 }
 
+const STEP = 1 / 60;
+let acc = 0;
 let heartT = 0;
 function render(t) {
   const k = game.tension();
@@ -517,6 +555,7 @@ function render(t) {
   for (const e of game.enemies) if (e.type !== 'trap' && e.type !== 'popup') drawEnemy(ctx, e, t, uiRng);
   for (const pr of game.projectiles) drawProjectile(ctx, pr, t);
   if (game.boss && !game.boss.dead) drawBoss(ctx, game.boss, t);
+  drawTearReticle(ctx, game.player, t);
   drawPlayer(ctx, game.player, game.stats, game.style, t, k);
   if (game.tutorialStep) drawTutorial(ctx, game.tutorialStep, game, t, isTouch);
   fx.draw(ctx);
@@ -533,7 +572,7 @@ function render(t) {
   ctx.restore();
   if ('filter' in ctx) ctx.filter = 'none';
   fx.drawFlash(ctx, world.W, world.H);
-  if (game.boss && !game.boss.dead) drawBossBar(ctx, game.boss);
+  if (game.boss && !game.boss.dead && !world.safeTop) drawBossBar(ctx, game.boss);
   drawJoystick(ctx, input.joy, canvas.getBoundingClientRect(), scale);
 }
 

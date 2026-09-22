@@ -225,6 +225,8 @@ export class AudioEngine {
   }
   schedule() {
     const lookahead = 0.25;
+    // Вкладка была в фоне: не проигрываем пропущенное, перескакиваем к текущему времени.
+    if (this.nextNoteTime < this.ctx.currentTime - 0.5) this.nextNoteTime = this.ctx.currentTime;
     while (this.nextNoteTime < this.ctx.currentTime + lookahead) {
       this.playStep(this.step, this.nextNoteTime);
       const secPerStep = 60 / this.tempo / 4;

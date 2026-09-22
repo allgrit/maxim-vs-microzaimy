@@ -5,15 +5,14 @@ export const BOSS_EVERY = 5;
 export const FINAL_BOSS_DAY = 25;
 export const DEBT_LIMIT_BASE = 100000;
 export const INTEREST_RATE_BASE = 0.003; // доля долга в секунду
-export const NERVES_BASE = 100;
 export const ULT_CHARGE_NEEDED = 150; // порванных договоров на ульту
 export const COMBO_TIMEOUT = 2.5;
 export const COMBO_MAX_MULT = 5;
 
 export const DIFFICULTIES = {
-  easy: { id: 'easy', name: 'Лёгкий', desc: 'Кредитный рейтинг 900. Бумаги летят медленно.', mult: 0.7, enemyHp: 0.8, spawn: 0.75, interest: 0.7 },
+  easy: { id: 'easy', name: 'Лёгкий', desc: 'Бумаг меньше, проценты ниже, враги слабее.', mult: 0.7, enemyHp: 0.8, spawn: 0.75, interest: 0.7 },
   normal: { id: 'normal', name: 'Обычный', desc: 'Как в жизни. Никто не спрашивает.', mult: 1.0, enemyHp: 1.0, spawn: 1.0, interest: 1.0 },
-  nightmare: { id: 'nightmare', name: 'Кошмар', desc: 'Вы уже должны. Проценты капают с первой секунды.', mult: 1.5, enemyHp: 1.25, spawn: 1.3, interest: 1.5 },
+  nightmare: { id: 'nightmare', name: 'Кошмар', desc: 'Бумаг больше, проценты выше, враги крепче. Очки ×1.5.', mult: 1.5, enemyHp: 1.25, spawn: 1.3, interest: 1.5 },
 };
 
 export const SCORE = {
