@@ -74,6 +74,17 @@ export class Game {
     this.headlineIdx = Math.floor(this.rng.next() * HEADLINES.length);
 
     this.pendingLevelUps = meta.startLevel || 0;
+    this.tutorial = false; // первый забег: медленный старт, пока игрок не освоил разрыв
+    this.tutorialStep = null; // id текущего шага — для отрисовки подсказок
+    this.spotlight = null; // { x, y, r, label, counter, t, dur, target }
+    this.runStats.moved = 0;
+  }
+
+  // Спотлайт: короткое замедление и подсветка нового объекта.
+  showSpotlight(target, hint) {
+    this.spotlight = { target, label: hint.label, counter: hint.counter, t: 0, dur: 1.6 };
+    this.slowmo = Math.max(this.slowmo, 1.3);
+    this.audio.click();
   }
 
   // Смена ориентации: пропорционально перенести всё на новую арену.
@@ -174,6 +185,7 @@ export class Game {
     if (type === 'collector') e.chainT = 2.5;
     if (type === 'robocall') e.spawnT = 2;
     this.enemies.push(e);
+    if (this.hooks.onFirstSeen) this.hooks.onFirstSeen(type, e);
     return e;
   }
 
@@ -187,7 +199,9 @@ export class Game {
 
   spawnPickup(kind, pos = null) {
     const p = pos || this.randomInnerPos(60);
-    this.pickups.push({ id: uid++, kind, x: p.x, y: p.y, t: 0, life: kind === 'xp' ? 18 : 25, value: 1 });
+    const k = { id: uid++, kind, x: p.x, y: p.y, t: 0, life: kind === 'xp' ? 18 : 25, value: 1 };
+    this.pickups.push(k);
+    if (this.hooks.onFirstSeen && kind !== 'xp') this.hooks.onFirstSeen(kind, k);
   }
 
   dropXp(x, y, n) {
@@ -532,6 +546,7 @@ export class Game {
     this.fx.flash('#000', 0.4);
     this.fx.text(world.W / 2, 200, def.quote, '#fff', 18, 3);
     if (this.hooks.onBoss) this.hooks.onBoss(def);
+    if (this.hooks.onFirstSeen) this.hooks.onFirstSeen('boss', this.boss);
   }
 
   damageBoss(n) {
@@ -822,9 +837,13 @@ export class Game {
   update(rawDt) {
     if (this.phase !== 'play') return;
     let dt = rawDt;
+    if (this.spotlight) {
+      this.spotlight.t += rawDt;
+      if (this.spotlight.t >= this.spotlight.dur || this.spotlight.target.dead) this.spotlight = null;
+    }
     if (this.slowmo > 0) {
       this.slowmo -= rawDt;
-      dt = rawDt * 0.3;
+      dt = rawDt * (this.spotlight ? 0.2 : 0.3);
     }
     this.time += dt;
     const p = this.player;
@@ -876,7 +895,7 @@ export class Game {
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
     p.signFlash = Math.max(0, p.signFlash - dt);
     if (mx) p.face = Math.sign(mx);
-    if (mx || my) p.walk += dt * 10;
+    if (mx || my) { p.walk += dt * 10; this.runStats.moved += Math.hypot(mx, my) * this.stats.speed * dt; }
 
     // цепь коллектора
     if (p.chained && !p.chained.dead) {
@@ -961,7 +980,8 @@ export class Game {
     const bossAlive = this.boss && !this.boss.dead;
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      const interval = spawnInterval(this.day, this.dayTime / DAY_LENGTH, this.diff, this.modifier) * (bossAlive ? 2.2 : 1);
+      const tutorialSlow = this.tutorial && this.runStats.torn < 12 ? 2.4 : 1;
+      const interval = spawnInterval(this.day, this.dayTime / DAY_LENGTH, this.diff, this.modifier) * (bossAlive ? 2.2 : 1) * tutorialSlow;
       this.spawnTimer = interval;
       if (this.enemies.length < 140) {
         let type = pickEnemy(this.rng, this.day, this.modifier);

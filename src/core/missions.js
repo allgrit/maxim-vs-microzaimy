@@ -29,7 +29,7 @@ export function emptyRunStats() {
   return {
     torn: 0, popups: 0, callsDashed: 0, cleanDays: 0, bestCombo: 0, day: 1, bosses: 0,
     collectors: 0, ults: 0, mimics: 0, traps: 0, day10LowDebt: 0, signed: 0, dashes: 0,
-    refuses: 0, damageTaken: 0, healed: 0, kills: 0,
+    refuses: 0, damageTaken: 0, healed: 0, kills: 0, moved: 0,
   };
 }
 

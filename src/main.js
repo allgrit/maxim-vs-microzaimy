@@ -2,8 +2,8 @@ import { Game, world } from './game.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { FX } from './fx.js';
-import { drawBackground, drawPlayer, drawEnemy, drawPickup, drawProjectile, drawZone, drawBoss, drawBossBar, drawJoystick, drawUltOverlay } from './render.js';
-import { DIFFICULTIES, TIPS, ULT_CHARGE_NEEDED } from './core/config.js';
+import { drawBackground, drawPlayer, drawEnemy, drawPickup, drawProjectile, drawZone, drawBoss, drawBossBar, drawJoystick, drawUltOverlay, drawSpotlight, drawTutorial } from './render.js';
+import { DIFFICULTIES, TIPS, ULT_CHARGE_NEEDED, ENEMY_HINTS, TUTORIAL_STEPS } from './core/config.js';
 import { createStore, addLeaderboardEntry, getLeaderboard, applyRunToProfile } from './core/save.js';
 import { UPGRADES, META_UPGRADES, STYLES, metaLevel, canBuyMeta, buyMeta, upgradeLevel } from './core/upgrades.js';
 import { ACHIEVEMENTS, missionProgress } from './core/missions.js';
@@ -109,6 +109,7 @@ $('btnBoard').onclick = () => { audio.ensure(); audio.click(); renderBoard('norm
 $('btnHow').onclick = () => { audio.ensure(); audio.click(); show('howto'); };
 $('btnMute').onclick = () => { audio.ensure(); audio.setMuted(!audio.muted); profile.muted = audio.muted; saveProfile(); renderMenu(); };
 for (const b of document.querySelectorAll('.back')) b.onclick = () => { audio.click(); renderMenu(); show('menu'); };
+$('btnReplayTutorial').onclick = () => { profile.seenTutorial = false; profile.seenHints = []; saveProfile(); audio.click(); toast('Обучение покажется в следующем забеге'); };
 
 // ---------- МАГАЗИН ----------
 function renderShop() {
@@ -203,10 +204,13 @@ function startRun(daily) {
       onGameOver: showGameOver,
       onVictory: () => show('victory'),
       onMissionDone: (m) => toast(`Миссия выполнена: ${m.text}`),
+      onFirstSeen: firstSeen,
       onBoss: (b) => toast(`БОСС: ${b.name}`, 2500),
       onBossPhase2: (b) => toast(`ПОВЫШЕНИЕ: ${b.phase2Name}`, 3500),
     },
   });
+  game.tutorial = !profile.seenTutorial;
+  tutorialIdx = game.tutorial ? 0 : -1;
   lastResult = null;
   lastEntry = null;
   fx.particles = [];
@@ -215,8 +219,55 @@ function startRun(daily) {
   show(null);
   audio.setTempo(132);
   audio.startMusic();
-  toast(TIPS[uiRng.int(0, TIPS.length - 1)], 3500);
+  if (!game.tutorial) toast(TIPS[uiRng.int(0, TIPS.length - 1)], 3500);
   lastT = performance.now();
+}
+
+// ---------- ОНБОРДИНГ: без текста ----------
+let tutorialIdx = -1;
+
+function setTeach(action, on) {
+  const a = document.getElementById(action === 'dash' ? 'skillDash' : action === 'refuse' ? 'skillRefuse' : 'skillUlt');
+  const b = document.querySelector(`.tbtn[data-action="${action}"]`);
+  if (a) a.classList.toggle('teach', on);
+  if (b) b.classList.toggle('teach', on);
+}
+
+function updateTutorial() {
+  if (!game) return;
+  if (tutorialIdx < 0 || tutorialIdx >= TUTORIAL_STEPS.length) {
+    game.tutorialStep = null;
+    setTeach('dash', false);
+    setTeach('refuse', false);
+    return;
+  }
+  const step = TUTORIAL_STEPS[tutorialIdx];
+  game.tutorialStep = step.id;
+  setTeach('dash', step.id === 'dash');
+  setTeach('refuse', step.id === 'refuse');
+  if (step.check(game)) {
+    tutorialIdx++;
+    audio.mission();
+    fx.confetti(game.player.x, game.player.y, 16);
+    if (tutorialIdx >= TUTORIAL_STEPS.length) {
+      profile.seenTutorial = true;
+      saveProfile();
+      game.tutorialStep = null;
+      setTeach('dash', false);
+      setTeach('refuse', false);
+    }
+  }
+}
+
+// Первая встреча с объектом — спотлайт (замедление + кольцо + пиктограмма), один раз на профиль.
+function firstSeen(kind, target) {
+  const hint = ENEMY_HINTS[kind];
+  if (!hint || profile.seenHints.includes(kind) || !target) return;
+  if (kind === 'contract' && game.tutorial) return; // договор объясняет шаг обучения
+  if (game.spotlight) return; // не накладывать — покажем при следующем появлении
+  profile.seenHints.push(kind);
+  saveProfile();
+  game.showSpotlight(target, hint);
 }
 
 function showLevelUp(choices, rerolls) {
@@ -412,6 +463,7 @@ function frame(now) {
   if (game.phase === 'play') game.update(dt);
   fx.update(dt);
   render(now / 1000);
+  if (game && game.phase === 'play') updateTutorial();
   if (game) {
     const k = game.tension();
     if (game.phase === 'play') {
@@ -466,8 +518,10 @@ function render(t) {
   for (const pr of game.projectiles) drawProjectile(ctx, pr, t);
   if (game.boss && !game.boss.dead) drawBoss(ctx, game.boss, t);
   drawPlayer(ctx, game.player, game.stats, game.style, t, k);
+  if (game.tutorialStep) drawTutorial(ctx, game.tutorialStep, game, t, isTouch);
   fx.draw(ctx);
   for (const e of game.enemies) if (e.type === 'popup') drawEnemy(ctx, e, t, uiRng);
+  if (game.spotlight) drawSpotlight(ctx, game.spotlight, t);
   if (game.ultActive > 0) drawUltOverlay(ctx, game.ultActive);
   if (game.player.inverted > 0) {
     ctx.save();

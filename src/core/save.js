@@ -18,6 +18,7 @@ export function defaultProfile() {
     runs: 0,
     leaderboards: { easy: [], normal: [], nightmare: [], daily: {} },
     seenTutorial: false,
+    seenHints: [],
   };
 }
 

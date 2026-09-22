@@ -143,3 +143,29 @@ export const TIPS = [
   'Ежедневный вызов одинаков у всех игроков. Сравните результат.',
   'Полиция принимает заявление только при полной шкале ульты.',
 ];
+
+// Игровая подсказка при первой встрече: замедление, кольцо на цели, пиктограмма контрмеры.
+// counter: 'tear' — рвать руками, 'dash' — рывок, 'refuse' — «Отказ!», 'x' — крестик, 'avoid' — не касаться, 'pick' — подобрать.
+export const ENEMY_HINTS = {
+  contract: { label: 'Договор', counter: 'tear' },
+  promoter: { label: 'Промоутер', counter: 'tear' },
+  call: { label: 'Звонок', counter: 'dash' },
+  sms: { label: 'Спам', counter: 'avoid' },
+  trap: { label: 'Ловушка', counter: 'refuse' },
+  popup: { label: 'Поп-ап', counter: 'x' },
+  collector: { label: 'Коллектор', counter: 'avoid' },
+  robocall: { label: 'Автодозвон', counter: 'tear' },
+  mimic: { label: 'Не чай!', counter: 'refuse' },
+  drone: { label: 'Дрон', counter: 'tear' },
+  boss: { label: 'Босс', counter: 'tear' },
+  cert: { label: 'Справка', counter: 'pick' },
+  tea: { label: 'Чай', counter: 'pick' },
+};
+
+// Шаги обучения первого забега — только визуальные цели, без текста.
+export const TUTORIAL_STEPS = [
+  { id: 'move', check: (g) => g.runStats.moved >= 120 },
+  { id: 'tear', check: (g) => g.runStats.torn >= 3 },
+  { id: 'dash', check: (g) => g.runStats.dashes >= 1 },
+  { id: 'refuse', check: (g) => g.runStats.refuses >= 1 },
+];

@@ -825,3 +825,182 @@ export function drawUltOverlay(ctx, k) {
   ctx.fillRect(0, world.H - 18, world.W, 18);
   ctx.restore();
 }
+
+// ---------- Игровые подсказки без текста ----------
+function chevron(ctx, x, y, angle, size, color, alpha) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.5, -size * 0.6);
+  ctx.lineTo(size * 0.4, 0);
+  ctx.lineTo(-size * 0.5, size * 0.6);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function counterIcon(ctx, x, y, counter, t) {
+  ctx.save();
+  ctx.translate(x, y);
+  const pulse = 1 + Math.sin(t * 8) * 0.08;
+  ctx.scale(pulse, pulse);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#2b2d42';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, 18, 0, 6.28);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  if (counter === 'tear') {
+    // две руки рвут лист
+    ctx.fillStyle = '#fff8e7';
+    ctx.strokeStyle = '#2b2d42';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(-1, -9); ctx.lineTo(-3, 9); ctx.lineTo(-8, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -9); ctx.lineTo(8, -9); ctx.lineTo(8, 9); ctx.lineTo(0, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#d7263d';
+    ctx.beginPath(); ctx.moveTo(-1, -9); ctx.lineTo(1, -3); ctx.lineTo(-2, 2); ctx.lineTo(0, 9); ctx.stroke();
+  } else if (counter === 'dash') {
+    ctx.strokeStyle = '#35a7ff';
+    ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(9, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, -6); ctx.lineTo(9, 0); ctx.lineTo(3, 6); ctx.stroke();
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(-12, -5); ctx.lineTo(-6, -5); ctx.moveTo(-12, 5); ctx.lineTo(-6, 5); ctx.stroke();
+  } else if (counter === 'refuse') {
+    ctx.strokeStyle = '#35a7ff';
+    ctx.beginPath(); ctx.arc(0, 0, 6 + (t * 3 % 1) * 8, 0, 6.28); ctx.stroke();
+    ctx.fillStyle = '#2b2d42';
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, 6.28); ctx.fill();
+  } else if (counter === 'x') {
+    ctx.fillStyle = '#d7263d';
+    ctx.fillRect(-9, -9, 18, 18);
+    ctx.strokeStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(5, 5); ctx.moveTo(5, -5); ctx.lineTo(-5, 5); ctx.stroke();
+  } else if (counter === 'avoid') {
+    ctx.strokeStyle = '#d7263d';
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-7, -7); ctx.lineTo(7, 7); ctx.stroke();
+  } else if (counter === 'pick') {
+    ctx.strokeStyle = '#2a9d3a';
+    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-6, 2); ctx.lineTo(0, 8); ctx.lineTo(6, 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function drawSpotlight(ctx, sp, t) {
+  const tg = sp.target;
+  const k = Math.min(1, sp.t / 0.25);
+  const fade = sp.t > sp.dur - 0.3 ? (sp.dur - sp.t) / 0.3 : 1;
+  const r = (tg.r || 20) + 26;
+  ctx.save();
+  ctx.globalAlpha = 0.45 * k * fade;
+  // затемнение с «дыркой» на цели
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.rect(0, 0, world.W, world.H);
+  ctx.arc(tg.x, tg.y, r + 10, 0, 6.28, true);
+  ctx.fill();
+  ctx.globalAlpha = fade;
+  ctx.strokeStyle = '#ffe74c';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -t * 40;
+  ctx.beginPath();
+  ctx.arc(tg.x, tg.y, r, 0, 6.28);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // плашка: название и пиктограмма контрмеры
+  const y = tg.y - r - 30;
+  ctx.font = `bold 14px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(sp.label).width;
+  const bw = tw + 62;
+  const bx = Math.max(6, Math.min(world.W - bw - 6, tg.x - bw / 2));
+  const by = Math.max(world.safeTop + 6, y - 20);
+  ctx.fillStyle = '#fff8e7';
+  ctx.strokeStyle = '#2b2d42';
+  ctx.lineWidth = 3;
+  rr(ctx, bx, by, bw, 40, 10);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#2b2d42';
+  ctx.fillText(sp.label, bx + 12, by + 20);
+  counterIcon(ctx, bx + bw - 24, by + 20, sp.counter, t);
+  ctx.restore();
+}
+
+// Шаги первого забега: стрелки вокруг Максима, подсветка ближайшего договора, радиус рук.
+export function drawTutorial(ctx, step, game, t, isTouch) {
+  const p = game.player;
+  ctx.save();
+  if (step === 'move') {
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      for (let j = 0; j < 3; j++) {
+        const k = (t * 1.2 + j / 3) % 1;
+        const d = 40 + k * 34;
+        chevron(ctx, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, a, 16, '#ffe74c', (1 - k) * 0.9);
+      }
+    }
+    if (isTouch) {
+      // палец, который ведут по экрану
+      const fx = p.x + Math.sin(t * 2) * 40;
+      const fy = p.y + 90;
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(p.x, fy, 40, 0, 6.28); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(fx, fy, 16, 0, 6.28); ctx.fill();
+    }
+  } else if (step === 'tear') {
+    let best = null;
+    let bd = Infinity;
+    for (const e of game.enemies) {
+      if (e.dead || e.type !== 'contract') continue;
+      const d = Math.hypot(e.x - p.x, e.y - p.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    // радиус рук мигает
+    ctx.strokeStyle = `rgba(255,231,76,${0.5 + Math.sin(t * 6) * 0.4})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, game.stats.tearRadius, 0, 6.28);
+    ctx.stroke();
+    if (best) {
+      const a = Math.atan2(best.y - p.y, best.x - p.x);
+      const d0 = game.stats.tearRadius + 10;
+      const d1 = Math.max(d0 + 1, bd - 30);
+      for (let j = 0; j < 3; j++) {
+        const k = (t * 1.2 + j / 3) % 1;
+        chevron(ctx, p.x + Math.cos(a) * (d0 + (d1 - d0) * k), p.y + Math.sin(a) * (d0 + (d1 - d0) * k), a, 16, '#ffe74c', 1 - k * 0.7);
+      }
+      ctx.strokeStyle = '#ffe74c';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(best.x, best.y, 26 + Math.sin(t * 8) * 4, 0, 6.28);
+      ctx.stroke();
+      counterIcon(ctx, best.x, best.y - 44, 'tear', t);
+    }
+  } else if (step === 'dash') {
+    counterIcon(ctx, p.x, p.y - 52, 'dash', t);
+    const k = (t * 1.5) % 1;
+    chevron(ctx, p.x + 30 + k * 40, p.y, 0, 18, '#35a7ff', 1 - k);
+  } else if (step === 'refuse') {
+    counterIcon(ctx, p.x, p.y - 52, 'refuse', t);
+    ctx.strokeStyle = `rgba(53,167,255,${1 - (t * 1.2 % 1)})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 20 + (t * 1.2 % 1) * game.stats.refuseRadius, 0, 6.28);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
