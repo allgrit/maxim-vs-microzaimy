@@ -2,7 +2,7 @@ import { ENEMIES, BOSSES, DAY_MODIFIERS, SCENES, BOSS_EVERY } from './config.js'
 
 // Коэффициент сложности дня.
 export function difficultyFor(day) {
-  return 1 + day * 0.18 + Math.floor(day / BOSS_EVERY) * 0.35;
+  return 1.3 + day * 0.18 + Math.floor(day / BOSS_EVERY) * 0.35;
 }
 
 export function enemyHpScale(day, diffCfg) {
@@ -62,7 +62,7 @@ export function pickEnemy(rng, day, modifier = {}) {
 }
 
 export function pickModifier(rng, day) {
-  if (day < 3 || isBossDay(day)) return DAY_MODIFIERS[0];
+  if (day < 2 || isBossDay(day)) return DAY_MODIFIERS[0];
   const pool = DAY_MODIFIERS.filter((m) => m.minDay <= day && m.id !== 'none');
   if (rng.chance(0.3)) return DAY_MODIFIERS[0];
   return rng.pick(pool);

@@ -1,4 +1,4 @@
-import { DAY_LENGTH, DEBT_LIMIT_BASE, INTEREST_RATE_BASE, ULT_CHARGE_NEEDED, ENEMIES, ENEMY_QUOTES, ENEMY_QUOTES_LATE, HEADLINES, HEADLINES_LATE, DIFFICULTIES, FINAL_BOSS_DAY } from './core/config.js';
+import { DAY_LENGTH, dayLength, DEBT_LIMIT_BASE, INTEREST_RATE_BASE, ULT_CHARGE_NEEDED, ENEMIES, ENEMY_QUOTES, ENEMY_QUOTES_LATE, HEADLINES, HEADLINES_LATE, DIFFICULTIES, FINAL_BOSS_DAY } from './core/config.js';
 import { createRng } from './core/rng.js';
 import { spawnInterval, enemyHpScale, enemySpeedScale, isBossDay, bossForDay, pickEnemy, pickModifier, sceneForDay, difficultyFor } from './core/waves.js';
 import { computeStats, rollChoices, xpForLevel, STYLES } from './core/upgrades.js';
@@ -60,7 +60,7 @@ export class Game {
     this.day = 1;
     this.dayTime = 0;
     this.time = 0;
-    this.spawnTimer = 1.2;
+    this.spawnTimer = 0.4;
     this.teaTimer = 10;
     this.certTimer = 35;
     this.modifier = pickModifier(this.rng, 1);
@@ -84,6 +84,12 @@ export class Game {
     this.pendingSpots = []; // подсказки, ждущие появления цели в кадре
     this.massKill = false; // ульта: облегчённые эффекты при массовом уничтожении
     this.runStats.moved = 0;
+  }
+
+  // Стартовый залп: сразу есть что рвать. Вызывается после установки хуков и флага обучения.
+  openingVolley() {
+    const n = this.tutorial ? 2 : 4;
+    for (let i = 0; i < n; i++) this.spawnEnemy('contract');
   }
 
   // Спотлайт: короткое замедление и подсветка нового объекта — когда он уже в кадре.
@@ -1042,8 +1048,8 @@ export class Game {
     const bossAlive = this.boss && !this.boss.dead;
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      const tutorialSlow = this.tutorial && this.runStats.torn < 3 ? 3.5 : this.tutorial && this.runStats.torn < 12 ? 2.2 : 1;
-      const interval = spawnInterval(this.day, this.dayTime / DAY_LENGTH, this.diff, this.modifier) * (bossAlive ? 2.2 : 1) * tutorialSlow;
+      const tutorialSlow = this.tutorial && this.runStats.torn < 3 ? 1.6 : 1;
+      const interval = spawnInterval(this.day, this.dayTime / dayLength(this.day), this.diff, this.modifier) * (bossAlive ? 2.2 : 1) * tutorialSlow;
       this.spawnTimer = interval;
       if (this.enemies.length < 140) {
         let type = pickEnemy(this.rng, this.day, this.modifier);
@@ -1280,7 +1286,7 @@ export class Game {
     }
     if (!bossAlive && !(this.boss && this.boss.dead)) {
       this.dayTime += dt;
-      if (this.dayTime >= DAY_LENGTH) this.endDay();
+      if (this.dayTime >= dayLength(this.day)) this.endDay();
     }
   }
 
@@ -1334,7 +1340,7 @@ export class Game {
       level: this.level,
       day: this.day,
       dayTime: this.dayTime,
-      dayLen: DAY_LENGTH,
+      dayLen: dayLength(this.day),
       bossAlive: !!(this.boss && !this.boss.dead),
       boss: this.boss,
       combo: this.combo.count,

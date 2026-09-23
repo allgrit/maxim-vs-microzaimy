@@ -11,7 +11,9 @@ function makeInput(keys = []) {
   return { move: () => [0, 0], consume: (a) => keys.includes(a), endFrame() {} };
 }
 function makeGame(over = {}) {
-  return new Game({ difficulty: 'normal', profile: defaultProfile(), audio, fx, input: makeInput(), ...over });
+  const g = new Game({ difficulty: 'normal', profile: defaultProfile(), audio, fx, input: makeInput(), ...over });
+  g.enemies = []; // стартовый залп договоров мешает изолированным сценариям
+  return g;
 }
 
 test('зона «Стейкинг» с игроком в центре не даёт NaN', () => {

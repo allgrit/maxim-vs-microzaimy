@@ -6,7 +6,7 @@ import { computeStats, rollChoices, upgradeLevel, UPGRADES, xpForLevel, buyMeta,
 import { createCombo, comboHit, comboTick, comboMultiplier, pointsFor, finalScore, reputationFor, formatMoney, shareText } from '../src/core/score.js';
 import { rollMissions, checkMissions, emptyRunStats, ACHIEVEMENTS, MISSION_POOL } from '../src/core/missions.js';
 import { createStore, memoryStorage, addLeaderboardEntry, getLeaderboard, applyRunToProfile, defaultProfile } from '../src/core/save.js';
-import { DIFFICULTIES, ENEMIES, BOSSES, DAY_MODIFIERS } from '../src/core/config.js';
+import { DIFFICULTIES, ENEMIES, BOSSES, DAY_MODIFIERS, dayLength, DAY_LENGTH } from '../src/core/config.js';
 
 test('rng детерминирован по сиду и даёт значения в [0,1)', () => {
   const a = createRng('seed-1');
@@ -51,15 +51,15 @@ test('сложность растёт монотонно, интервал сп�
 
 test('враги открываются по дням, модификатор меняет веса', () => {
   const d1 = availableEnemies(1).map((e) => e.id);
-  assert.deepEqual(d1, ['contract']);
-  const d11 = availableEnemies(11).map((e) => e.id);
+  assert.deepEqual(d1, ['contract', 'promoter']);
+  const d11 = availableEnemies(7).map((e) => e.id);
   assert.equal(d11.length, Object.keys(ENEMIES).length);
   const promo = availableEnemies(3, { contractMult: 1.5 }).find((e) => e.id === 'contract');
   assert.equal(promo.weight, ENEMIES.contract.weight * 1.5);
   const r = createRng(1);
-  for (let i = 0; i < 100; i++) assert.equal(pickEnemy(r, 1), 'contract');
+  for (let i = 0; i < 100; i++) assert.ok(['contract', 'promoter'].includes(pickEnemy(r, 1)));
   const picks = new Set();
-  for (let i = 0; i < 400; i++) picks.add(pickEnemy(r, 11));
+  for (let i = 0; i < 400; i++) picks.add(pickEnemy(r, 7));
   assert.ok(picks.size >= 6);
 });
 
@@ -76,6 +76,7 @@ test('боссы каждые 5 дней, после 25-го — по кругу
 test('модификатор дня: до 3-го дня и в дни боссов — обычный', () => {
   const r = createRng(7);
   assert.equal(pickModifier(r, 1).id, 'none');
+  assert.ok(dayLength(1) < dayLength(3) && dayLength(3) === DAY_LENGTH);
   assert.equal(pickModifier(r, 10).id, 'none');
   const ids = new Set();
   for (let i = 0; i < 200; i++) ids.add(pickModifier(r, 12).id);

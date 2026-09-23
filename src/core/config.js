@@ -1,6 +1,10 @@
 // Константы баланса и справочники контента. Чистые данные, без побочных эффектов.
 
 export const DAY_LENGTH = 45; // секунд
+// Первые дни короче — быстрый вход: день 1 — 20с, день 2 — 30с, дальше полные.
+export function dayLength(day) {
+  return day === 1 ? 20 : day === 2 ? 30 : DAY_LENGTH;
+}
 export const BOSS_EVERY = 5;
 export const FINAL_BOSS_DAY = 25;
 export const DEBT_LIMIT_BASE = 100000;
@@ -35,15 +39,15 @@ export const SCORE = {
 // Враги: базовые параметры. minDay — с какого дня появляются, weight — относительная частота.
 export const ENEMIES = {
   contract: { id: 'contract', name: 'Договор', hp: 1, speed: 55, radius: 14, minDay: 1, weight: 10, debt: 3500 },
-  promoter: { id: 'promoter', name: 'Промоутер', hp: 3, speed: 48, radius: 16, minDay: 2, weight: 3, debt: 0 },
-  call: { id: 'call', name: 'Звонок', hp: 2, speed: 0, radius: 12, minDay: 3, weight: 3, debt: 0, life: 9, ring: 95 },
-  sms: { id: 'sms', name: 'СМС-спам', hp: 1, speed: 190, radius: 8, minDay: 4, weight: 3, debt: 0, damage: 8 },
+  promoter: { id: 'promoter', name: 'Промоутер', hp: 3, speed: 48, radius: 16, minDay: 1, weight: 3, debt: 0 },
+  call: { id: 'call', name: 'Звонок', hp: 2, speed: 0, radius: 12, minDay: 2, weight: 3, debt: 0, life: 9, ring: 95 },
+  sms: { id: 'sms', name: 'СМС-спам', hp: 1, speed: 190, radius: 8, minDay: 2, weight: 3, debt: 0, damage: 8 },
   trap: { id: 'trap', name: 'Подпишите здесь', hp: 1, speed: 0, radius: 26, minDay: 5, weight: 2, debt: 7000, life: 14, armTime: 0.8 },
-  popup: { id: 'popup', name: 'Поп-ап', hp: 2, speed: 32, radius: 40, minDay: 6, weight: 2, debt: 0, life: 16 },
-  collector: { id: 'collector', name: 'Коллектор', hp: 10, speed: 42, radius: 20, minDay: 7, weight: 1.5, debt: 0, damage: 22 },
-  robocall: { id: 'robocall', name: 'Автодозвон', hp: 8, speed: 0, radius: 18, minDay: 8, weight: 1, debt: 0, life: 20 },
-  mimic: { id: 'mimic', name: '«Мы из банка»', hp: 1, speed: 0, radius: 12, minDay: 9, weight: 1.5, debt: 9000, life: 12 },
-  drone: { id: 'drone', name: 'Дрон-курьер', hp: 2, speed: 120, radius: 16, minDay: 11, weight: 1.5, debt: 0 },
+  popup: { id: 'popup', name: 'Поп-ап', hp: 2, speed: 32, radius: 40, minDay: 3, weight: 2, debt: 0, life: 16 },
+  collector: { id: 'collector', name: 'Коллектор', hp: 10, speed: 42, radius: 20, minDay: 4, weight: 1.5, debt: 0, damage: 22 },
+  robocall: { id: 'robocall', name: 'Автодозвон', hp: 8, speed: 0, radius: 18, minDay: 6, weight: 1, debt: 0, life: 20 },
+  mimic: { id: 'mimic', name: '«Мы из банка»', hp: 1, speed: 0, radius: 12, minDay: 6, weight: 1.5, debt: 9000, life: 12 },
+  drone: { id: 'drone', name: 'Дрон-курьер', hp: 2, speed: 120, radius: 16, minDay: 7, weight: 1.5, debt: 0 },
 };
 
 // Театр абсурда: во второй фазе босс «повышается» — титул растёт, реплики теряют связь с реальностью.
@@ -70,7 +74,7 @@ export const SCENES = [
 
 export const DAY_MODIFIERS = [
   { id: 'none', name: 'Обычный день', desc: 'Ничего особенного. Пока.', minDay: 1 },
-  { id: 'promo', name: 'Акция 0%', desc: 'Договоров в полтора раза больше.', minDay: 3, contractMult: 1.5 },
+  { id: 'promo', name: 'Акция 0%', desc: 'Договоров в полтора раза больше.', minDay: 2, contractMult: 1.5 },
   { id: 'friday', name: 'Пятница', desc: 'Промоутеры бегают быстрее.', minDay: 3, promoterSpeed: 1.4 },
   { id: 'roaming', name: 'Роуминг', desc: 'Кольца звонков шире.', minDay: 4, callRing: 1.4 },
   { id: 'sanctions', name: 'Санкции', desc: 'Проценты в два раза выше.', minDay: 4, interest: 2 },
@@ -163,8 +167,8 @@ export const ENEMY_HINTS = {
 
 // Шаги обучения первого забега — только визуальные цели, без текста.
 export const TUTORIAL_STEPS = [
-  { id: 'move', check: (g) => g.runStats.moved >= 120 },
-  { id: 'tear', check: (g) => g.runStats.torn >= 3 },
+  { id: 'move', check: (g) => g.runStats.moved >= 60 },
+  { id: 'tear', check: (g) => g.runStats.torn >= 2 },
   { id: 'dash', check: (g) => g.runStats.dashes >= 1 },
   { id: 'refuse', check: (g) => g.runStats.refuses >= 1 },
 ];

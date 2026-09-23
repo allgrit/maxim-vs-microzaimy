@@ -230,6 +230,7 @@ function startRun(daily) {
   });
   game.tutorial = !profile.seenTutorial;
   tutorialIdx = game.tutorial ? 0 : -1;
+  game.openingVolley();
   lastResult = null;
   lastEntry = null;
   fx.particles = [];
